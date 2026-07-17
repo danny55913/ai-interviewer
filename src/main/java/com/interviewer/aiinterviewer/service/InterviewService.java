@@ -1,5 +1,6 @@
 package com.interviewer.aiinterviewer.service;
 
+import com.interviewer.aiinterviewer.exception.SessionNotFoundException;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -51,9 +52,14 @@ public class InterviewService {
     }
 
     /**
-     * 대화 진행
+     * 대화 진행 (세션 검증 로직 추가)
      */
     public String chat(String sessionId, String userMessage) {
+        // [검증 추가] 메모리에 해당 세션의 대화 내역(혹은 시스템 프롬프트)이 아예 없는 경우 예외를 던집니다.
+        if (chatMemory.get(sessionId) == null || chatMemory.get(sessionId).isEmpty()) {
+            throw new SessionNotFoundException("유효하지 않은 면접 세션입니다. 먼저 면접을 시작해주세요.");
+        }
+
         return this.chatClient.prompt()
                 .user(userMessage)
                 .advisors(spec -> spec.param("chat_memory_conversation_id", sessionId))

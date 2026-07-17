@@ -54,32 +54,39 @@ function App() {
   };
 
   // 2. 대화 발송 API 호출 (/chat)
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!inputMessage.trim() || isLoading) return;
+    const handleSendMessage = async (e) => {
+      e.preventDefault();
+      if (!inputMessage.trim() || isLoading) return;
 
-    const userMsg = inputMessage;
-    setInputMessage('');
+      const userMsg = inputMessage;
+      setInputMessage('');
 
-    // 내 메시지를 대화창에 즉시 추가
-    setChatHistory((prev) => [...prev, { sender: 'user', text: userMsg }]);
-    setIsLoading(true);
+      // 내 메시지를 대화창에 즉시 추가
+      setChatHistory((prev) => [...prev, { sender: 'user', text: userMsg }]);
+      setIsLoading(true);
 
-    try {
-      const response = await api.post('/chat', {
-        sessionId,
-        message: userMsg,
-      });
+      try {
+        const response = await api.post('/chat', {
+          sessionId,
+          message: userMsg,
+        });
 
-      // AI 면접관의 답변을 대화창에 추가
-      setChatHistory((prev) => [...prev, { sender: 'ai', text: response.data.reply }]);
-    } catch (error) {
-      console.error(error);
-      setChatHistory((prev) => [...prev, { sender: 'system', text: '오류: 답변을 받아오지 못했습니다.' }]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        // AI 면접관의 답변을 대화창에 추가
+        setChatHistory((prev) => [...prev, { sender: 'ai', text: response.data.reply }]);
+      } catch (error) {
+        console.error(error);
+
+        // [수정] 백엔드에서 던진 예쁜 에러 메시지가 있다면 대화창에 시스템 메시지로 보여줍니다.
+        const errorMsg = error.response?.data?.message || '답변을 받아오지 못했습니다. 서버 상태를 확인해 주세요.';
+
+        setChatHistory((prev) => [
+          ...prev,
+          { sender: 'system', text: `⚠️ 에러: ${errorMsg}` }
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
   return (
     <div className="app-container">
