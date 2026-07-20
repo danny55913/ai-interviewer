@@ -16,6 +16,13 @@ public class InterviewController {
         this.interviewService = interviewService;
     }
 
+    // ⭐️ 추가된 면접 결과 저장 API
+    @PostMapping("/save")
+    public String saveInterviewResult(@RequestBody com.interviewer.aiinterviewer.controller.dto.InterviewSaveRequest request) {
+        interviewService.saveResult(request);
+        return "면접 결과가 성공적으로 데이터베이스에 저장되었습니다.";
+    }
+
     /**
      * 1. 면접 시작 API
      * 분야와 연차를 받아 세션을 초기화하고 맞춤형 페르소나를 셋팅합니다.
