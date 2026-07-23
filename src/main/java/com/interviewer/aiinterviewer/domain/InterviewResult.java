@@ -1,9 +1,12 @@
 package com.interviewer.aiinterviewer.domain;
 
 import jakarta.persistence.*;
+import lombok.*; // Lombok 어노테이션 import
 import java.time.LocalDateTime;
 
 @Entity
+@Builder
+@AllArgsConstructor // Builder 사용을 위해 필요
 @Table(name = "interview_result")
 public class InterviewResult {
 
