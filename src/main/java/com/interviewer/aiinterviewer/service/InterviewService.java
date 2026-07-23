@@ -123,4 +123,19 @@ public class InterviewService {
 
         return interviewResultRepository.save(result);
     }
+
+    /**
+     * 3. 전체 면접 기록 목록 최신순 조회
+     */
+    public List<InterviewResult> getAllInterviewHistory() {
+        return interviewResultRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    /**
+     * 4. 특정 세션 ID의 면접 상세 기록 조회
+     */
+    public InterviewResult getInterviewDetail(String sessionId) {
+        return interviewResultRepository.findBySessionId(sessionId)
+                .orElseThrow(() -> new SessionNotFoundException("해당 세션의 면접 기록을 찾을 수 없습니다: " + sessionId));
+    }
 }
