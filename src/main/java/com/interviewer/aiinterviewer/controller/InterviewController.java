@@ -2,9 +2,15 @@ package com.interviewer.aiinterviewer.controller;
 
 import com.interviewer.aiinterviewer.controller.dto.InterviewRequest;
 import com.interviewer.aiinterviewer.controller.dto.InterviewResponse;
+import com.interviewer.aiinterviewer.controller.dto.InterviewSaveRequest;
 import com.interviewer.aiinterviewer.controller.dto.InterviewStartRequest;
+import com.interviewer.aiinterviewer.domain.InterviewResult;
 import com.interviewer.aiinterviewer.service.InterviewService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/interview")
@@ -16,11 +22,20 @@ public class InterviewController {
         this.interviewService = interviewService;
     }
 
-    // ⭐️ 추가된 면접 결과 저장 API
+    /**
+     * ⭐️ 면접 결과 저장 및 AI 종합 피드백 반환 API
+     */
     @PostMapping("/save")
-    public String saveInterviewResult(@RequestBody com.interviewer.aiinterviewer.controller.dto.InterviewSaveRequest request) {
-        interviewService.saveResult(request);
-        return "면접 결과가 성공적으로 데이터베이스에 저장되었습니다.";
+    public ResponseEntity<Map<String, Object>> saveInterviewResult(@RequestBody InterviewSaveRequest request) {
+        // 1. 서비스에서 저장 처리 후 생성된 Entity를 반환받음
+        InterviewResult savedResult = interviewService.saveResult(request);
+
+        // 2. 프론트엔드로 전달할 응답 데이터 구성
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "면접 결과가 성공적으로 데이터베이스에 저장되었습니다.");
+        response.put("aiFeedback", savedResult.getAiFeedback()); // ⭐️ AI 피드백 전달!
+
+        return ResponseEntity.ok(response);
     }
 
     /**
