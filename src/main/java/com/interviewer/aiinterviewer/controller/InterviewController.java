@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -55,5 +56,23 @@ public class InterviewController {
     public InterviewResponse chat(@RequestBody InterviewRequest request) {
         String reply = interviewService.chat(request.sessionId(), request.message());
         return new InterviewResponse(request.sessionId(), reply);
+    }
+
+    /**
+     * 3. 전체 면접 기록 목록 조회 API
+     */
+    @GetMapping("/history")
+    public ResponseEntity<List<InterviewResult>> getAllHistory() {
+        List<InterviewResult> historyList = interviewService.getAllInterviewHistory();
+        return ResponseEntity.ok(historyList);
+    }
+
+    /**
+     * 4. 특정 면접 기록 상세 조회 API
+     */
+    @GetMapping("/history/{sessionId}")
+    public ResponseEntity<InterviewResult> getHistoryDetail(@PathVariable String sessionId) {
+        InterviewResult result = interviewService.getInterviewDetail(sessionId);
+        return ResponseEntity.ok(result);
     }
 }
