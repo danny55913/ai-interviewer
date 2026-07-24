@@ -3,7 +3,8 @@ spring:
     name: ai-interviewer
 
   datasource:
-    url: jdbc:h2:mem:interviewdb;MODE=MySQL
+    # ⭐️ 핵심 변경: mem 대신 file 방식으로 설정하여 서버가 꺼져도 ./data 디렉토리에 데이터 보존!
+    url: jdbc:h2:file:./data/testdb;AUTO_SERVER=TRUE
     driver-class-name: org.h2.Driver
     username: sa
     password:

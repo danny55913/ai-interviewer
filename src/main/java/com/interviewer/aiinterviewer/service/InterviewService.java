@@ -2,8 +2,10 @@ package com.interviewer.aiinterviewer.service;
 
 import com.interviewer.aiinterviewer.controller.dto.InterviewSaveRequest;
 import com.interviewer.aiinterviewer.domain.InterviewResult;
+import com.interviewer.aiinterviewer.entity.User; // ⭐️ User 엔티티 추가
 import com.interviewer.aiinterviewer.exception.SessionNotFoundException;
 import com.interviewer.aiinterviewer.repository.InterviewResultRepository;
+import com.interviewer.aiinterviewer.repository.UserRepository; // ⭐️ UserRepository 추가
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -25,8 +27,11 @@ public class InterviewService {
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
     private final InterviewResultRepository interviewResultRepository;
+    private final UserRepository userRepository; // ⭐️ 추가
 
-    public InterviewService(ChatClient.Builder chatClientBuilder, InterviewResultRepository interviewResultRepository) {
+    public InterviewService(ChatClient.Builder chatClientBuilder,
+                            InterviewResultRepository interviewResultRepository,
+                            UserRepository userRepository) { // ⭐️ UserRepository 주입 추가
         this.chatMemory = MessageWindowChatMemory.builder()
                 .chatMemoryRepository(new InMemoryChatMemoryRepository())
                 .maxMessages(20)
@@ -37,6 +42,7 @@ public class InterviewService {
                 .build();
 
         this.interviewResultRepository = interviewResultRepository;
+        this.userRepository = userRepository; // ⭐️ 추가
     }
 
     /**
@@ -59,10 +65,9 @@ public class InterviewService {
     }
 
     /**
-     * ⭐️ [신규/수정] 이력서 기반 면접 세션 초기화 및 첫 질문 생성
+     * ⭐️ [신규/수정] 이력서 기반 면접 세션 초기화 및 첫 질문 생성 (기존 유지)
      */
     public String startInterviewWithResume(String sessionId, String jobCategory, String experienceLevel, String resumeText) {
-        // 기존 세션 메모리 초기화
         chatMemory.clear(sessionId);
 
         StringBuilder systemPrompt = new StringBuilder();
@@ -75,7 +80,6 @@ public class InterviewService {
             3. 매번 질문은 오직 1개만 던지세요.
             """, jobCategory, experienceLevel));
 
-        // 이력서 텍스트가 존재하는 경우 프롬프트 강화
         if (resumeText != null && !resumeText.trim().isEmpty()) {
             systemPrompt.append("\n=== 지원자 제출 이력서/포트폴리오 내용 ===\n")
                     .append(resumeText).append("\n")
@@ -83,15 +87,12 @@ public class InterviewService {
                     .append("위 이력서에 작성된 프로젝트 경험, 사용 기술 스택, 주요 성과 또는 트러블슈팅 내역을 바탕으로 기술 면접을 진행해 주세요.\n");
         }
 
-        // 메모리에 시스템 프롬프트 저장
         chatMemory.add(sessionId, List.of(new SystemMessage(systemPrompt.toString())));
 
-        // 첫 질문 유도 요청 메시지
         String initialPrompt = (resumeText != null && !resumeText.trim().isEmpty())
                 ? "제출된 이력서 내용을 바탕으로 가장 검증하고 싶거나 궁금한 부분에 대해 첫 번째 질문을 던져주세요."
                 : "안녕하세요. 간단한 인사와 함께 첫 질문을 던져주세요.";
 
-        // 첫 질문 AI 생성 및 반환
         return this.chatClient.prompt()
                 .user(initialPrompt)
                 .advisors(spec -> spec.param("chat_memory_conversation_id", sessionId))
@@ -112,7 +113,7 @@ public class InterviewService {
     }
 
     /**
-     * 2. 면접 종료 후 종합 피드백 리포트 생성 및 저장
+     * 2. 면접 종료 후 종합 피드백 리포트 생성 및 저장 (기존 유지)
      */
     public InterviewResult saveResult(InterviewSaveRequest request) {
 
@@ -162,8 +163,74 @@ public class InterviewService {
         return interviewResultRepository.save(result);
     }
 
+    /**
+     * ⭐️ [신규 추가] 로그인한 유저 정보를 포함하여 면접 결과 저장
+     */
+    public InterviewResult saveResultWithUser(InterviewSaveRequest request, String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다: " + username));
+
+        // 기존 AI 피드백 생성 로직 동일하게 수행
+        String feedbackPrompt = String.format("""
+            당신은 IT 기술 면접관입니다. 아래 진행된 모의 면접 대화 내역을 바탕으로 지원자에 대한 종합 평가 리포트를 작성해 주세요.
+            
+            [면접 정보]
+            - 직무: %s
+            - 연차: %s
+            
+            [대화 내역]
+            %s
+            
+            [작성 양식]
+            아래 양식을 엄격히 지켜서 간결하게 피드백을 작성해 주세요:
+            1. 점수 (기술 이해도: OO점, 논리성: OO점, 총점: OO점)
+            2. 잘한 점 (강점 2가지)
+            3. 아쉬운 점 및 보완할 부분 (2가지)
+            4. 추천 공부 키워드 (3~4개)
+            """,
+                request.jobCategory(),
+                request.experienceLevel(),
+                request.fullChatHistory()
+        );
+
+        String aiFeedbackResult;
+        try {
+            aiFeedbackResult = chatClient.prompt()
+                    .user(feedbackPrompt)
+                    .advisors(spec -> spec.param("chat_memory_conversation_id", request.sessionId()))
+                    .call()
+                    .content();
+        } catch (Exception e) {
+            log.error("AI 피드백 생성 중 오류 발생: ", e);
+            aiFeedbackResult = "AI 피드백 생성 중 오류가 발생했습니다. (사유: " + e.getMessage() + ")";
+        }
+
+        // user 필드를 포함하여 빌드
+        InterviewResult result = InterviewResult.builder()
+                .sessionId(request.sessionId())
+                .jobCategory(request.jobCategory())
+                .experienceLevel(request.experienceLevel())
+                .fullChatHistory(request.fullChatHistory())
+                .aiFeedback(aiFeedbackResult)
+                .user(user) // ⭐️ 로그인한 사용자 연동
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        return interviewResultRepository.save(result);
+    }
+
     public List<InterviewResult> getAllInterviewHistory() {
         return interviewResultRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    /**
+     * ⭐️ [신규 추가] 로그인한 사용자의 면접 기록만 최신순 조회
+     */
+    public List<InterviewResult> getMyInterviewHistory(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다: " + username));
+
+        return interviewResultRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
     }
 
     public InterviewResult getInterviewDetail(String sessionId) {
