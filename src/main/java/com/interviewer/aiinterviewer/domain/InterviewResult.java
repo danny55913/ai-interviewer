@@ -3,6 +3,7 @@ package com.interviewer.aiinterviewer.domain;
 import jakarta.persistence.*;
 import lombok.*; // Lombok 어노테이션 import
 import java.time.LocalDateTime;
+import com.interviewer.aiinterviewer.entity.User;
 
 @Entity
 @Builder
@@ -33,9 +34,15 @@ public class InterviewResult {
 
     private LocalDateTime createdAt;
 
+    // ⭐️ [추가] 유저(User) 계정과 묶어주기 위한 N:1 연관관계
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
     // JPA용 기본 생성자
     protected InterviewResult() {}
 
+    // 기존 생성자 (유저 없이 생성할 상황도 대비)
     public InterviewResult(String sessionId, String jobCategory, String experienceLevel, String fullChatHistory, String aiFeedback, Integer durationSeconds) {
         this.sessionId = sessionId;
         this.jobCategory = jobCategory;
@@ -44,6 +51,19 @@ public class InterviewResult {
         this.aiFeedback = aiFeedback;
         this.durationSeconds = durationSeconds;
         this.createdAt = LocalDateTime.now();
+    }
+
+    // ⭐️ [추가] 유저를 포함하는 생성자
+    public InterviewResult(String sessionId, String jobCategory, String experienceLevel, String fullChatHistory, String aiFeedback, Integer durationSeconds, User user) {
+        this(sessionId, jobCategory, experienceLevel, fullChatHistory, aiFeedback, durationSeconds);
+        this.user = user;
+    }
+
+    @PrePersist
+    public void onCreate() {
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
     }
 
     // 데이터 조회를 위해 Getter만 열어둡니다.
@@ -55,4 +75,7 @@ public class InterviewResult {
     public String getAiFeedback() { return aiFeedback; }
     public Integer getDurationSeconds() { return durationSeconds; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+
+    // ⭐️ [추가] User Getter
+    public User getUser() { return user; }
 }
