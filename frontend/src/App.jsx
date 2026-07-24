@@ -5,9 +5,6 @@ import './App.css';
 // Axios 기본 백엔드 주소 설정
 const api = axios.create({
   baseURL: 'http://localhost:8080/api/interview',
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 function App() {
@@ -22,6 +19,7 @@ function App() {
   const [sessionId, setSessionId] = useState('');
   const [jobCategory, setJobCategory] = useState('Java Backend');
   const [experienceLevel, setExperienceLevel] = useState('신입');
+  const [resumeFile, setResumeFile] = useState(null); // ⭐️ 이력서 파일 State 추가
   const [isStarted, setIsStarted] = useState(false);
 
   const [inputMessage, setInputMessage] = useState('');
@@ -95,7 +93,7 @@ function App() {
   }, [activeTab]);
 
   // ----------------------------------------------------
-  // 5. API: 면접 시작
+  // 5. API: 이력서 첨부 지원 면접 시작 (FormData 전송)
   // ----------------------------------------------------
   const handleStartInterview = async (e) => {
     e.preventDefault();
@@ -110,22 +108,38 @@ function App() {
     setIsLoading(true);
     isTimingOutRef.current = false;
 
+    // ⭐️ Multipart/form-data 전송을 위한 FormData 객체 생성
+    const formData = new FormData();
+    formData.append('sessionId', newSessionId);
+    formData.append('jobCategory', jobCategory);
+    formData.append('experienceLevel', experienceLevel);
+
+    if (resumeFile) {
+      formData.append('resumeFile', resumeFile);
+    }
+
     try {
-      await api.post('/start', {
-        sessionId: newSessionId,
-        jobCategory,
-        experienceLevel,
+      const response = await api.post('/start-with-resume', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
 
       setIsStarted(true);
+
+      // AI가 생성한 첫 번째 맞춤 질문 수신
+      const initialAiReply = response.data.reply;
+
       setChatHistory([
         {
           sender: 'system',
-          text: `면접 세션이 준비되었습니다. (${jobCategory} / ${experienceLevel})`,
+          text: `면접 세션이 준비되었습니다. (${jobCategory} / ${experienceLevel}${
+            resumeFile ? ` / 이력서: ${resumeFile.name}` : ''
+          })`,
         },
         {
           sender: 'ai',
-          text: `안녕하세요! 오늘 [${jobCategory}] 직무 면접관을 맡게 된 시니어 개발자입니다. 자기소개를 포함하여 준비되셨을 때 말씀해 주시면 질문을 드리겠습니다.`,
+          text: initialAiReply,
         },
       ]);
     } catch (error) {
@@ -228,13 +242,14 @@ function App() {
           jobCategory,
           experienceLevel,
           fullChatHistory: fullHistoryText,
-          aiFeedback: '', // 백엔드 서비스에서 AI 총평 자동 생성
+          aiFeedback: '',
         });
 
         alert('면접 평가 및 결과가 안전하게 저장되었습니다!');
         setIsStarted(false);
         setChatHistory([]);
-        setActiveTab('history'); // 저장 후 바로 내 면접 기록 탭으로 이동
+        setResumeFile(null); // 이력서 파일 리셋
+        setActiveTab('history');
       } catch (error) {
         console.error(error);
         alert('면접 결과를 저장하는 중 에러가 발생했습니다.');
@@ -283,6 +298,7 @@ function App() {
                     <option value="DevOps / Cloud">DevOps / Cloud</option>
                   </select>
                 </div>
+
                 <div className="form-group">
                   <label>연차 선택</label>
                   <select
@@ -294,8 +310,24 @@ function App() {
                     <option value="5년차 이상 시니어">5년차 이상 시니어</option>
                   </select>
                 </div>
+
+                {/* ⭐️ [신규] 이력서/포트폴리오 파일 업로드 필드 */}
+                <div className="form-group">
+                  <label>이력서 / 포트폴리오 (선택, PDF 또는 TXT)</label>
+                  <input
+                    type="file"
+                    accept=".pdf, .txt"
+                    onChange={(e) => setResumeFile(e.target.files[0] || null)}
+                  />
+                  {resumeFile && (
+                    <p style={{ fontSize: '12px', color: '#28a745', marginTop: '5px' }}>
+                      📄 선택된 파일: {resumeFile.name} ({(resumeFile.size / 1024).toFixed(1)} KB)
+                    </p>
+                  )}
+                </div>
+
                 <button type="submit" className="start-btn" disabled={isLoading}>
-                  {isLoading ? '세션 준비 중...' : '면접 시작하기'}
+                  {isLoading ? '이력서 분석 및 질문 생성 중...' : '면접 시작하기'}
                 </button>
               </form>
             </div>

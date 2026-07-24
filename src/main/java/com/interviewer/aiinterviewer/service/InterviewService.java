@@ -40,12 +40,11 @@ public class InterviewService {
     }
 
     /**
-     * 1. 면접 시작 시 프롬프트 설정 (답변 길이를 대폭 줄이고 면접관처럼 핵심만 말하도록 제약)
+     * 1. 일반 면접 시작 (기존 유지)
      */
     public void initInterview(String sessionId, String jobCategory, String experienceLevel) {
         chatMemory.clear(sessionId);
 
-        // ⭐️ 답변을 짧고 명확하게 제어하기 위한 제약 조건 강화
         String dynamicSystemPrompt = String.format("""
             당신은 대기업 IT 서비스 기업의 시니어 개발자이며, [%s] 직무 [%s] 채용을 담당하는 면접관입니다.
             
@@ -57,6 +56,47 @@ public class InterviewService {
             """, jobCategory, experienceLevel);
 
         chatMemory.add(sessionId, List.of(new SystemMessage(dynamicSystemPrompt)));
+    }
+
+    /**
+     * ⭐️ [신규/수정] 이력서 기반 면접 세션 초기화 및 첫 질문 생성
+     */
+    public String startInterviewWithResume(String sessionId, String jobCategory, String experienceLevel, String resumeText) {
+        // 기존 세션 메모리 초기화
+        chatMemory.clear(sessionId);
+
+        StringBuilder systemPrompt = new StringBuilder();
+        systemPrompt.append(String.format("""
+            당신은 대기업 IT 서비스 기업의 시니어 개발자이며, [%s] 직무 [%s] 채용을 담당하는 면접관입니다.
+            
+            [답변 규칙]
+            1. 면접관으로서 실제 면접처럼 짧고 명확하게 핵심만 말하세요. (최대 2~3문장 내외)
+            2. 절대로 가이드라인, 볼드체 목록, 질문 팁 등을 덧붙이지 말고 자연스러운 대화체로 말하세요.
+            3. 매번 질문은 오직 1개만 던지세요.
+            """, jobCategory, experienceLevel));
+
+        // 이력서 텍스트가 존재하는 경우 프롬프트 강화
+        if (resumeText != null && !resumeText.trim().isEmpty()) {
+            systemPrompt.append("\n=== 지원자 제출 이력서/포트폴리오 내용 ===\n")
+                    .append(resumeText).append("\n")
+                    .append("=========================================\n")
+                    .append("위 이력서에 작성된 프로젝트 경험, 사용 기술 스택, 주요 성과 또는 트러블슈팅 내역을 바탕으로 기술 면접을 진행해 주세요.\n");
+        }
+
+        // 메모리에 시스템 프롬프트 저장
+        chatMemory.add(sessionId, List.of(new SystemMessage(systemPrompt.toString())));
+
+        // 첫 질문 유도 요청 메시지
+        String initialPrompt = (resumeText != null && !resumeText.trim().isEmpty())
+                ? "제출된 이력서 내용을 바탕으로 가장 검증하고 싶거나 궁금한 부분에 대해 첫 번째 질문을 던져주세요."
+                : "안녕하세요. 간단한 인사와 함께 첫 질문을 던져주세요.";
+
+        // 첫 질문 AI 생성 및 반환
+        return this.chatClient.prompt()
+                .user(initialPrompt)
+                .advisors(spec -> spec.param("chat_memory_conversation_id", sessionId))
+                .call()
+                .content();
     }
 
     public String chat(String sessionId, String userMessage) {
@@ -98,12 +138,10 @@ public class InterviewService {
                 request.fullChatHistory()
         );
 
-        // 2. AI에게 피드백 생성 요청
         String aiFeedbackResult;
         try {
             aiFeedbackResult = chatClient.prompt()
                     .user(feedbackPrompt)
-                    // ⭐️ 핵심 해결법: sessionId를 conversation_id로 전달해 줍니다!
                     .advisors(spec -> spec.param("chat_memory_conversation_id", request.sessionId()))
                     .call()
                     .content();
@@ -124,16 +162,10 @@ public class InterviewService {
         return interviewResultRepository.save(result);
     }
 
-    /**
-     * 3. 전체 면접 기록 목록 최신순 조회
-     */
     public List<InterviewResult> getAllInterviewHistory() {
         return interviewResultRepository.findAllByOrderByCreatedAtDesc();
     }
 
-    /**
-     * 4. 특정 세션 ID의 면접 상세 기록 조회
-     */
     public InterviewResult getInterviewDetail(String sessionId) {
         return interviewResultRepository.findBySessionId(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("해당 세션의 면접 기록을 찾을 수 없습니다: " + sessionId));
